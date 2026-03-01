@@ -1,0 +1,404 @@
+const SHOP_EMAIL = "deinshop@mail.de"; // <- HIER DEINE SHOP-EMAIL EINTRAGEN
+const CURRENCY = "EUR";
+
+const products = [
+  {
+    id: "pl-1",
+    name: "Plüschtier Häschen (handgemacht)",
+    category: "pluesch",
+    priceCents: 2490,
+    desc: "Weiches Häschen aus Plüschstoff, ideal als Geschenk. Optional mit Namen.",
+    popularScore: 90,
+    options: [
+      { key: "farbe", label: "Farbe", values: ["Beige", "Rosa", "Grau"] },
+      { key: "personalisierung", label: "Personalisierung", values: ["Ohne", "Mit Name (+4€)"] }
+    ]
+  },
+  {
+    id: "pl-2",
+    name: "Plüschtier Bärchen",
+    category: "pluesch",
+    priceCents: 2790,
+    desc: "Klassisches Bärchen, robust vernäht. Für kleine Kinderhände.",
+    popularScore: 80,
+    options: [
+      { key: "farbe", label: "Farbe", values: ["Honig", "Schoko"] }
+    ]
+  },
+  {
+    id: "kl-1",
+    name: "Baby Body (Handarbeit)",
+    category: "kleidung",
+    priceCents: 1990,
+    desc: "Bequemer Body für Babys. Größen wählbar.",
+    popularScore: 85,
+    options: [
+      { key: "groesse", label: "Größe", values: ["50/56", "62/68", "74/80"] },
+      { key: "farbe", label: "Farbe", values: ["Creme", "Hellblau", "Altrosa"] }
+    ]
+  },
+  {
+    id: "kl-2",
+    name: "Kinder Mütze",
+    category: "kleidung",
+    priceCents: 1590,
+    desc: "Weiche Mütze für Kinder. Ideal für Herbst/Winter.",
+    popularScore: 70,
+    options: [
+      { key: "groesse", label: "Größe", values: ["0–1 J", "2–4 J", "5–7 J"] },
+      { key: "farbe", label: "Farbe", values: ["Grau", "Marine", "Rosa"] }
+    ]
+  },
+  {
+    id: "zu-1",
+    name: "Schnullerband (Zubehör)",
+    category: "zubehoer",
+    priceCents: 990,
+    desc: "Praktisches Band – bitte Nutzungshinweise/Material ergänzen.",
+    popularScore: 60,
+    options: [
+      { key: "farbe", label: "Farbe", values: ["Natur", "Mint", "Rosa"] }
+    ]
+  }
+];
+
+const els = {
+  grid: document.getElementById("productGrid"),
+  categoryFilter: document.getElementById("categoryFilter"),
+  sortBy: document.getElementById("sortBy"),
+  cartCount: document.getElementById("cartCount"),
+  openCart: document.getElementById("openCart"),
+  cartDrawer: document.getElementById("cartDrawer"),
+  closeCart: document.getElementById("closeCart"),
+  closeCartBackdrop: document.getElementById("closeCartBackdrop"),
+  cartItems: document.getElementById("cartItems"),
+  cartSubtotal: document.getElementById("cartSubtotal"),
+  clearCart: document.getElementById("clearCart"),
+  checkout: document.getElementById("checkout"),
+  shippingNote: document.getElementById("shippingNote"),
+  taxNote: document.getElementById("taxNote"),
+
+  productModal: document.getElementById("productModal"),
+  closeProduct: document.getElementById("closeProduct"),
+  closeProductBackdrop: document.getElementById("closeProductBackdrop"),
+  modalTitle: document.getElementById("modalTitle"),
+  modalDesc: document.getElementById("modalDesc"),
+  modalPrice: document.getElementById("modalPrice"),
+  modalOptions: document.getElementById("modalOptions"),
+  modalNote: document.getElementById("modalNote"),
+  modalQty: document.getElementById("modalQty"),
+  modalImg: document.getElementById("modalImg"),
+  addToCartConfirm: document.getElementById("addToCartConfirm"),
+};
+
+function formatEUR(cents){
+  const value = cents / 100;
+  return new Intl.NumberFormat("de-DE", { style:"currency", currency:CURRENCY }).format(value);
+}
+
+function getCart(){
+  try{
+    return JSON.parse(localStorage.getItem("cart_items") || "[]");
+  }catch{
+    return [];
+  }
+}
+function setCart(cart){
+  localStorage.setItem("cart_items", JSON.stringify(cart));
+  updateCartBadge();
+}
+
+function cartKey(productId, optionMap, note){
+  const opt = Object.keys(optionMap).sort().map(k => `${k}:${optionMap[k]}`).join("|");
+  const n = (note || "").trim();
+  return `${productId}__${opt}__${n}`;
+}
+
+function updateCartBadge(){
+  const cart = getCart();
+  const count = cart.reduce((sum, it) => sum + it.qty, 0);
+  els.cartCount.textContent = String(count);
+}
+
+function svgPlaceholder(label){
+  const safe = (label || "Handmade").slice(0, 20);
+  return `
+  <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${safe}">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="rgba(124,92,255,.55)"/>
+        <stop offset="1" stop-color="rgba(57,208,255,.40)"/>
+      </linearGradient>
+    </defs>
+    <rect width="800" height="400" fill="rgba(233,238,252,.04)"/>
+    <circle cx="620" cy="120" r="110" fill="url(#g)"/>
+    <circle cx="520" cy="260" r="150" fill="rgba(124,92,255,.20)"/>
+    <text x="40" y="210" font-size="44" fill="rgba(233,238,252,.80)" font-family="system-ui, -apple-system, Segoe UI, Roboto">${safe}</text>
+    <text x="40" y="260" font-size="22" fill="rgba(233,238,252,.55)" font-family="system-ui, -apple-system, Segoe UI, Roboto">Handgemacht • Kuschelig • Kinder</text>
+  </svg>`;
+}
+
+function getFilteredProducts(){
+  const cat = els.categoryFilter.value;
+  let list = [...products];
+  if(cat !== "all"){
+    list = list.filter(p => p.category === cat);
+  }
+
+  const sort = els.sortBy.value;
+  if(sort === "popular"){
+    list.sort((a,b) => (b.popularScore || 0) - (a.popularScore || 0));
+  }else if(sort === "priceAsc"){
+    list.sort((a,b) => a.priceCents - b.priceCents);
+  }else if(sort === "priceDesc"){
+    list.sort((a,b) => b.priceCents - a.priceCents);
+  }else if(sort === "nameAsc"){
+    list.sort((a,b) => a.name.localeCompare(b.name, "de"));
+  }
+
+  return list;
+}
+
+function renderProducts(){
+  const list = getFilteredProducts();
+  els.grid.innerHTML = "";
+
+  list.forEach(p => {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card__img">${svgPlaceholder(p.name)}</div>
+      <div>
+        <h3 class="card__title">${p.name}</h3>
+        <p class="card__desc">${p.desc}</p>
+      </div>
+      <div class="card__foot">
+        <span class="price">${formatEUR(p.priceCents)}</span>
+        <button class="btn btn--ghost" data-open="${p.id}">Auswählen</button>
+      </div>
+      <div class="pill"><span>Kategorie:</span><strong>${labelCategory(p.category)}</strong></div>
+    `;
+    els.grid.appendChild(card);
+  });
+
+  els.grid.querySelectorAll("[data-open]").forEach(btn => {
+    btn.addEventListener("click", () => openProduct(btn.getAttribute("data-open")));
+  });
+}
+
+function labelCategory(cat){
+  if(cat === "pluesch") return "Plüschtiere";
+  if(cat === "kleidung") return "Kinderkleidung";
+  if(cat === "zubehoer") return "Zubehör";
+  return "Shop";
+}
+
+let activeProduct = null;
+
+function openProduct(productId){
+  const p = products.find(x => x.id === productId);
+  if(!p) return;
+  activeProduct = p;
+
+  els.modalTitle.textContent = p.name;
+  els.modalDesc.textContent = p.desc;
+  els.modalPrice.textContent = formatEUR(p.priceCents);
+  els.modalNote.value = "";
+  els.modalQty.value = 1;
+  els.modalImg.innerHTML = svgPlaceholder(p.name);
+
+  els.modalOptions.innerHTML = "";
+  (p.options || []).forEach(opt => {
+    const wrap = document.createElement("label");
+    wrap.className = "field";
+    wrap.innerHTML = `
+      <span>${opt.label}</span>
+      <select data-opt="${opt.key}">
+        ${opt.values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("")}
+      </select>
+    `;
+    els.modalOptions.appendChild(wrap);
+  });
+
+  showModal(true);
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function showModal(open){
+  els.productModal.classList.toggle("is-open", open);
+  els.productModal.setAttribute("aria-hidden", open ? "false" : "true");
+}
+
+function showCart(open){
+  els.cartDrawer.classList.toggle("is-open", open);
+  els.cartDrawer.setAttribute("aria-hidden", open ? "false" : "true");
+  if(open) renderCart();
+}
+
+function addActiveToCart(){
+  if(!activeProduct) return;
+
+  const optionMap = {};
+  els.modalOptions.querySelectorAll("select[data-opt]").forEach(sel => {
+    optionMap[sel.getAttribute("data-opt")] = sel.value;
+  });
+
+  const note = (els.modalNote.value || "").trim();
+  const qty = Math.max(1, Number(els.modalQty.value || 1));
+
+  let priceCents = activeProduct.priceCents;
+  if(optionMap.personalisierung && optionMap.personalisierung.includes("(+4€)")){
+    priceCents += 400;
+  }
+
+  const key = cartKey(activeProduct.id, optionMap, note);
+  const cart = getCart();
+  const existing = cart.find(it => it.key === key);
+
+  if(existing){
+    existing.qty += qty;
+  }else{
+    cart.push({
+      key,
+      productId: activeProduct.id,
+      name: activeProduct.name,
+      qty,
+      unitPriceCents: priceCents,
+      options: optionMap,
+      note
+    });
+  }
+
+  setCart(cart);
+  showModal(false);
+  showCart(true);
+}
+
+function cartSubtotalCents(cart){
+  return cart.reduce((sum, it) => sum + it.unitPriceCents * it.qty, 0);
+}
+
+function renderCart(){
+  const cart = getCart();
+  els.cartItems.innerHTML = "";
+
+  if(cart.length === 0){
+    els.cartItems.innerHTML = `<div class="panel muted">Dein Warenkorb ist leer.</div>`;
+    els.cartSubtotal.textContent = formatEUR(0);
+    els.shippingNote.textContent = "Versandkosten werden nach Bestätigung berechnet (Platzhalter).";
+    return;
+  }
+
+  cart.forEach((it, idx) => {
+    const optText = Object.keys(it.options || {}).map(k => `${k}: ${it.options[k]}`).join(", ");
+    const item = document.createElement("div");
+    item.className = "cartitem";
+    item.innerHTML = `
+      <div>
+        <h4>${it.name}</h4>
+        <div class="cartmeta">${optText || "—"}</div>
+        ${it.note ? `<div class="cartmeta">Hinweis: ${escapeHtml(it.note)}</div>` : ""}
+        <div class="cartmeta">Einzelpreis: ${formatEUR(it.unitPriceCents)}</div>
+      </div>
+      <div class="cartitem__actions">
+        <input class="qty" type="number" min="1" value="${it.qty}" data-qty="${idx}" aria-label="Menge">
+        <button class="linkbtn" data-remove="${idx}">Entfernen</button>
+      </div>
+    `;
+    els.cartItems.appendChild(item);
+  });
+
+  els.cartItems.querySelectorAll("[data-qty]").forEach(input => {
+    input.addEventListener("change", (e) => {
+      const i = Number(e.target.getAttribute("data-qty"));
+      const cart = getCart();
+      const val = Math.max(1, Number(e.target.value || 1));
+      cart[i].qty = val;
+      setCart(cart);
+      renderCart();
+    });
+  });
+
+  els.cartItems.querySelectorAll("[data-remove]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const i = Number(e.target.getAttribute("data-remove"));
+      const cart = getCart();
+      cart.splice(i, 1);
+      setCart(cart);
+      renderCart();
+    });
+  });
+
+  const subtotal = cartSubtotalCents(cart);
+  els.cartSubtotal.textContent = formatEUR(subtotal);
+  els.shippingNote.textContent = "Versandkosten werden nach Bestätigung berechnet (Platzhalter).";
+}
+
+function buildMail(cart){
+  const lines = [];
+  lines.push("Hallo,");
+  lines.push("");
+  lines.push("ich möchte folgende Bestellung anfragen:");
+  lines.push("");
+
+  cart.forEach((it, i) => {
+    const optText = Object.keys(it.options || {}).map(k => `${k}: ${it.options[k]}`).join(", ");
+    lines.push(`${i+1}) ${it.name}`);
+    lines.push(`   Menge: ${it.qty}`);
+    if(optText) lines.push(`   Optionen: ${optText}`);
+    if(it.note) lines.push(`   Hinweis: ${it.note}`);
+    lines.push(`   Einzelpreis: ${formatEUR(it.unitPriceCents)}`);
+    lines.push("");
+  });
+
+  lines.push(`Zwischensumme: ${formatEUR(cartSubtotalCents(cart))}`);
+  lines.push("Versand: bitte mitteilen");
+  lines.push("");
+  lines.push("Bitte bestätigt mir Verfügbarkeit, Lieferzeit und Gesamtsumme.");
+  lines.push("");
+  lines.push("Name:");
+  lines.push("Adresse:");
+  lines.push("Telefon (optional):");
+
+  return lines.join("\n");
+}
+
+function checkout(){
+  const cart = getCart();
+  if(cart.length === 0) return;
+
+  const subject = encodeURIComponent("Bestellanfrage – Kuschelfaden Atelier");
+  const body = encodeURIComponent(buildMail(cart));
+  window.location.href = `mailto:${encodeURIComponent(SHOP_EMAIL)}?subject=${subject}&body=${body}`;
+}
+
+els.categoryFilter.addEventListener("change", renderProducts);
+els.sortBy.addEventListener("change", renderProducts);
+
+els.openCart.addEventListener("click", () => showCart(true));
+els.closeCart.addEventListener("click", () => showCart(false));
+els.closeCartBackdrop.addEventListener("click", () => showCart(false));
+
+els.closeProduct.addEventListener("click", () => showModal(false));
+els.closeProductBackdrop.addEventListener("click", () => showModal(false));
+
+els.addToCartConfirm.addEventListener("click", addActiveToCart);
+
+els.clearCart.addEventListener("click", () => {
+  setCart([]);
+  renderCart();
+});
+
+els.checkout.addEventListener("click", checkout);
+
+els.taxNote.textContent = "Preise: Platzhalter. Bitte Hinweis zu MwSt./Versand anpassen.";
+updateCartBadge();
+renderProducts();
